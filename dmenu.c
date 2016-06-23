@@ -14,18 +14,26 @@
 #ifdef XINERAMA
 #include <X11/extensions/Xinerama.h>
 #endif
+#ifdef USE_DRW
 #include <X11/Xft/Xft.h>
-
 #include "drw.h"
+#else
+#include "draw.h"
+#endif
 #include "util.h"
 
 /* macros */
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
                              * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
+#ifdef USE_DRW
 #define TEXTW(X)              (drw_fontset_getwidth(drw, (X)) + lrpad)
 
 /* enums */
 enum { SchemeNorm, SchemeSel, SchemeOut, SchemeLast }; /* color schemes */
+#else
+#define TEXTW(X) (textw(dc, X))
+#define dpy (dc->dpy)
+#endif
 
 struct item {
 	char *text;
@@ -37,20 +45,33 @@ static char text[BUFSIZ] = "";
 static char *embed;
 static int bh, mw, mh;
 static int inputw = 0, promptw;
+#ifdef USE_DRW
 static int lrpad; /* sum of left and right padding */
+#endif
 static size_t cursor;
+#ifndef USE_DRW
+static unsigned long normcol[ColLast];
+static unsigned long selcol[ColLast];
+static unsigned long outcol[ColLast];
+#endif
 static struct item *items = NULL;
 static struct item *matches, *matchend;
 static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
 
 static Atom clip, utf8;
+#ifdef USE_DRW
 static Display *dpy;
+#else
+static DC *dc;
+#endif
 static Window root, parentwin, win;
 static XIC xic;
 
+#ifdef USE_DRW
 static Drw *drw;
 static Clr *scheme[SchemeLast];
+#endif
 
 #include "config.h"
 
@@ -60,8 +81,12 @@ static char *(*fstrstr)(const char *, const char *) = strstr;
 static unsigned int
 textw_clamp(const char *str, unsigned int n)
 {
+#ifdef USE_DRW
 	unsigned int w = drw_fontset_getwidth_clamp(drw, str, n) + lrpad;
 	return MIN(w, n);
+#else
+	return MIN(textw(dc, str), n);
+#endif
 }
 
 static void
@@ -101,14 +126,20 @@ cleanup(void)
 	size_t i;
 
 	XUngrabKeyboard(dpy, CurrentTime);
+#ifdef USE_DRW
 	for (i = 0; i < SchemeLast; i++)
 		drw_scm_free(drw, scheme[i], 2);
+#endif
 	for (i = 0; items && items[i].text; ++i)
 		free(items[i].text);
 	free(items);
+#ifdef USE_DRW
 	drw_free(drw);
 	XSync(dpy, False);
 	XCloseDisplay(dpy);
+#else
+	freedc(dc);
+#endif
 }
 
 static char *
@@ -129,6 +160,7 @@ cistrstr(const char *h, const char *n)
 	return NULL;
 }
 
+#ifdef USE_DRW
 static int
 drawitem(struct item *item, int x, int y, int w)
 {
@@ -190,6 +222,60 @@ drawmenu(void)
 	}
 	drw_map(drw, win, 0, 0, mw, mh);
 }
+#else
+
+static void
+drawmenu(void)
+{
+	unsigned int curpos;
+	struct item *item;
+
+	dc->x = 0;
+	dc->y = 0;
+	dc->h = bh;
+	drawrect(dc, 0, 0, mw, mh, True, BG(dc, normcol));
+
+	if (prompt && *prompt) {
+		dc->w = promptw;
+		drawtext(dc, prompt, selcol);
+		dc->x = dc->w;
+	}
+	/* draw input field */
+	dc->w = (lines > 0 || !matches) ? mw - dc->x : inputw;
+	drawtext(dc, text, normcol);
+
+	if ((curpos = textnw(dc, text, cursor) + dc->h/2 - 2) < dc->w)
+		drawrect(dc, curpos, 2, 1, dc->h - 4, True, FG(dc, normcol));
+
+	if (lines > 0) {
+		/* draw vertical list */
+		dc->w = mw - dc->x;
+		for (item = curr; item != next; item = item->right) {
+			// TODO y += bh
+			dc->y += dc->h;
+			drawtext(dc, item->text, (item == sel) ? selcol :
+			                         (item->out)   ? outcol : normcol);
+		}
+	} else if (matches) {
+		/* draw horizontal list */
+		dc->x += inputw;
+		dc->w = textw(dc, "<");
+		if(curr->left)
+			drawtext(dc, "<", normcol);
+		for (item = curr; item != next; item = item->right) {
+			dc->x += dc->w;
+			dc->w = textw_clamp(item->text, mw - dc->x - textw(dc, ">"));
+			drawtext(dc, item->text, (item == sel) ? selcol :
+			                         (item->out)   ? outcol : normcol);
+		}
+		dc->w = textw(dc, ">");
+		dc->x = mw - dc->w;
+		if(next)
+			drawtext(dc, ">", normcol);
+	}
+	mapdc(dc, win, mw, mh);
+}
+#endif
 
 static void
 grabfocus(void)
@@ -588,7 +674,11 @@ run(void)
 			exit(1);
 		case Expose:
 			if (ev.xexpose.count == 0)
+#ifdef USE_DRW
 				drw_map(drw, win, 0, 0, mw, mh);
+#else
+				mapdc(dc, win, mw, mh);
+#endif
 			break;
 		case FocusIn:
 			/* regrab focus from parent window */
@@ -626,14 +716,27 @@ setup(void)
 	int a, di, n, area = 0;
 #endif
 	/* init appearance */
+#ifdef USE_DRW
 	for (j = 0; j < SchemeLast; j++)
 		scheme[j] = drw_scm_create(drw, colors[j], 2);
+#else
+	normcol[ColBG] = getcolor(dc, normbgcolor);
+	normcol[ColFG] = getcolor(dc, normfgcolor);
+	selcol[ColBG]  = getcolor(dc, selbgcolor);
+	selcol[ColFG]  = getcolor(dc, selfgcolor);
+	outcol[ColBG]  = getcolor(dc, outbgcolor);
+	outcol[ColFG]  = getcolor(dc, outfgcolor);
+#endif
 
 	clip = XInternAtom(dpy, "CLIPBOARD",   False);
 	utf8 = XInternAtom(dpy, "UTF8_STRING", False);
 
 	/* calculate menu geometry */
+#ifdef USE_DRW
 	bh = drw->fonts->h + 2;
+#else
+	bh = dc->font.height + 2;
+#endif
 	lines = MAX(lines, 0);
 	mh = (lines + 1) * bh;
 #ifdef XINERAMA
@@ -676,13 +779,23 @@ setup(void)
 		y = topbar ? 0 : wa.height - mh;
 		mw = wa.width;
 	}
+#ifdef USE_DRW
 	promptw = (prompt && *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
+#else
+	promptw = (prompt && *prompt) ? textw(dc, prompt) : 0;
+#endif
+
 	inputw = mw / 3; /* input width: ~33% of monitor width */
+
 	match();
 
 	/* create menu window */
 	swa.override_redirect = True;
+#ifdef USE_DRW
 	swa.background_pixel = scheme[SchemeNorm][ColBg].pixel;
+#else
+	swa.background_pixel = normcol[ColBG];
+#endif
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
 	win = XCreateWindow(dpy, root, x, y, mw, mh, 0,
 	                    CopyFromParent, CopyFromParent, CopyFromParent,
@@ -707,7 +820,11 @@ setup(void)
 		}
 		grabfocus();
 	}
+#ifdef USE_DRW
 	drw_resize(drw, mw, mh);
+#else
+	resizedc(dc, mw, mh);
+#endif
 	drawmenu();
 }
 
@@ -748,13 +865,29 @@ main(int argc, char *argv[])
 		else if (!strcmp(argv[i], "-fn"))  /* font or font set */
 			fonts[0] = argv[++i];
 		else if (!strcmp(argv[i], "-nb"))  /* normal background color */
+#ifdef USE_DRW
 			colors[SchemeNorm][ColBg] = argv[++i];
+#else
+			normbgcolor = argv[++i];
+#endif
 		else if (!strcmp(argv[i], "-nf"))  /* normal foreground color */
+#ifdef USE_DRW
 			colors[SchemeNorm][ColFg] = argv[++i];
+#else
+			normfgcolor = argv[++i];
+#endif
 		else if (!strcmp(argv[i], "-sb"))  /* selected background color */
+#ifdef USE_DRW
 			colors[SchemeSel][ColBg] = argv[++i];
+#else
+			selbgcolor = argv[++i];
+#endif
 		else if (!strcmp(argv[i], "-sf"))  /* selected foreground color */
+#ifdef USE_DRW
 			colors[SchemeSel][ColFg] = argv[++i];
+#else
+			selfgcolor = argv[++i];
+#endif
 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
 			embed = argv[++i];
 		else
@@ -762,19 +895,29 @@ main(int argc, char *argv[])
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
+
+#ifdef USE_DRW
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("cannot open display");
+#else
+	dc = initdc();
+#endif
 	screen = DefaultScreen(dpy);
 	root = RootWindow(dpy, screen);
+
 	if (!embed || !(parentwin = strtol(embed, NULL, 0)))
 		parentwin = root;
 	if (!XGetWindowAttributes(dpy, parentwin, &wa))
 		die("could not get embedding window attributes: 0x%lx",
 		    parentwin);
+#ifdef USE_DRW
 	drw = drw_create(dpy, screen, root, wa.width, wa.height);
 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
 		die("no fonts could be loaded.");
 	lrpad = drw->fonts->h;
+#else
+	initfont(dc, fonts[0]);
+#endif
 
 #ifdef __OpenBSD__
 	if (pledge("stdio rpath", NULL) == -1)
