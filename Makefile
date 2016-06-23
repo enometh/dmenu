@@ -3,7 +3,7 @@
 
 include config.mk
 
-SRC = drw.c dmenu.c stest.c util.c
+SRC = draw.c dmenu.c stest.c util.c
 OBJ = $(SRC:.c=.o)
 
 all: dmenu stest
@@ -14,10 +14,11 @@ all: dmenu stest
 config.h:
 	cp config.def.h $@
 
-$(OBJ): arg.h config.h config.mk drw.h
 
-dmenu: dmenu.o drw.o util.o
-	$(CC) -o $@ dmenu.o drw.o util.o $(LDFLAGS)
+$(OBJ): arg.h config.h config.mk draw.h
+
+dmenu: dmenu.o draw.o util.o
+	$(CC) -o $@ dmenu.o draw.o util.o $(LDFLAGS)
 
 stest: stest.o
 	$(CC) -o $@ stest.o $(LDFLAGS)
@@ -28,7 +29,7 @@ clean:
 dist: clean
 	mkdir -p dmenu-$(VERSION)
 	cp LICENSE Makefile README arg.h config.def.h config.mk dmenu.1\
-		drw.h util.h dmenu_path dmenu_run stest.1 $(SRC)\
+		draw.h util.h dmenu_path dmenu_run stest.1 $(SRC)\
 		dmenu-$(VERSION)
 	tar -cf dmenu-$(VERSION).tar dmenu-$(VERSION)
 	gzip dmenu-$(VERSION).tar
