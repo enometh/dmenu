@@ -60,6 +60,7 @@ static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
 
 static Atom clip, utf8;
+static Atom type, dock;
 #ifdef USE_DRW
 static Display *dpy;
 #else
@@ -730,6 +731,8 @@ setup(void)
 
 	clip = XInternAtom(dpy, "CLIPBOARD",   False);
 	utf8 = XInternAtom(dpy, "UTF8_STRING", False);
+	type = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+	dock = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
 
 	/* calculate menu geometry */
 #ifdef USE_DRW
@@ -801,6 +804,8 @@ setup(void)
 	                    CopyFromParent, CopyFromParent, CopyFromParent,
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
 	XSetClassHint(dpy, win, &ch);
+	XChangeProperty(dpy, win, type, XA_ATOM, 32, PropModeReplace,
+			(unsigned char *) &dock, 1);
 
 	/* input methods */
 	if ((xim = XOpenIM(dpy, NULL, NULL, NULL)) == NULL)
