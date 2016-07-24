@@ -44,6 +44,7 @@ static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
 
 static Atom clip, utf8;
+static Atom type, dock;
 static DC *dc;
 static Window root, parentwin, win;
 static XIC xic;
@@ -600,6 +601,8 @@ setup(void)
 
 	clip = XInternAtom(dc->dpy, "CLIPBOARD",   False);
 	utf8 = XInternAtom(dc->dpy, "UTF8_STRING", False);
+	type = XInternAtom(dc->dpy, "_NET_WM_WINDOW_TYPE", False);
+	dock = XInternAtom(dc->dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
 
 	/* calculate menu geometry */
 	bh = dc->font.height + 2;
@@ -659,6 +662,8 @@ setup(void)
 	                    CopyFromParent, CopyFromParent, CopyFromParent,
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
 	XSetClassHint(dc->dpy, win, &ch);
+	XChangeProperty(dc->dpy, win, type, XA_ATOM, 32, PropModeReplace,
+			(unsigned char *) &dock, 1);
 
 	/* input methods */
 	if ((xim = XOpenIM(dc->dpy, NULL, NULL, NULL)) == NULL)
