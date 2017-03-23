@@ -792,16 +792,25 @@ setup(void)
 
 	match();
 
+	int xv_depth = DefaultDepth(dpy, screen);
+	Visual * xv_visual = DefaultVisual(dpy, screen);
+	Colormap xv_cmap = XCreateColormap(dpy, parentwin, xv_visual, AllocNone);
+
 	/* create menu window */
 	swa.override_redirect = True;
 #ifdef USE_DRW
 	swa.background_pixel = scheme[SchemeNorm][ColBg].pixel;
+	swa.border_pixel = scheme[SchemeNorm][ColFg].pixel;
 #else
 	swa.background_pixel = normcol[ColBG];
+	swa.border_pixel = normcol[ColFG];
 #endif
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
+
+	swa.colormap = xv_cmap;
 	win = XCreateWindow(dpy, root, x, y, mw, mh, 0,
-	                    CopyFromParent, CopyFromParent, CopyFromParent,
+			    xv_depth, CopyFromParent, xv_visual,
+			    CWBorderPixel | CWColormap |
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
 	XSetClassHint(dpy, win, &ch);
 	XChangeProperty(dpy, win, type, XA_ATOM, 32, PropModeReplace,
