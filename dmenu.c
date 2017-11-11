@@ -453,22 +453,39 @@ insert:
 		/* fallthrough */
 	case XK_Up:
 	case XK_KP_Up:
-		if (sel && sel->left && (sel = sel->left)->right == curr) {
-			curr = prev;
+		if (sel && sel->left) {
+			sel = sel->left;
+			if (sel->right == curr) {
+				curr = prev;
+				calcoffsets();
+			}
+		} else if (sel && sel == matches) {
+			fprintf(stderr, "madhu: up\n");  //;madhu 171111
+			sel = curr = matchend;
 			calcoffsets();
 		}
 		break;
 	case XK_Next:
 	case XK_KP_Next:
-		if (!next)
-			return;
+		if (!next) {
+			//;madhu 171111 return;
+			fprintf(stderr, "madhu: next\n");
+			sel = curr = matches;
+			calcoffsets();
+			break;
+		}
 		sel = curr = next;
 		calcoffsets();
 		break;
 	case XK_Prior:
 	case XK_KP_Prior:
-		if (!prev)
-			return;
+		if (!prev) {
+			// ;madhu 171111 return;
+			fprintf(stderr, "madhu: prior\n");
+			sel = curr = matchend;
+			calcoffsets();
+			break;
+		}
 		sel = curr = prev;
 		calcoffsets();
 		break;
@@ -493,8 +510,15 @@ insert:
 		/* fallthrough */
 	case XK_Down:
 	case XK_KP_Down:
-		if (sel && sel->right && (sel = sel->right) == next) {
-			curr = next;
+		if (sel && sel->right) {
+			sel = sel->right;
+			if (sel == next) {
+				curr = next;
+				calcoffsets();
+			}
+		} else if (sel && sel == matchend ) {
+			fprintf(stderr, "madhu: down\n");  //;madhu 171111
+			sel = curr = matches;
 			calcoffsets();
 		}
 		break;
