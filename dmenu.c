@@ -202,8 +202,10 @@ drawmenu(void)
 
 	if (lines > 0) {
 		/* draw vertical list */
-		for (item = curr; item != next; item = item->right)
-			drawitem(item, x, y += bh, mw - x);
+		for (item = curr; item != next; item = item->right) {
+			drawitem(item, 0, y += bh, mw);
+//			drawitem(item, x, y += bh, mw - x);
+		}
 	} else if (matches) {
 		/* draw horizontal list */
 		x += inputw;
@@ -250,7 +252,8 @@ drawmenu(void)
 
 	if (lines > 0) {
 		/* draw vertical list */
-		dc->w = mw - dc->x;
+		// dc->w = mw - dc->x;
+		dc->x = 0; dc->w = mw;
 		for (item = curr; item != next; item = item->right) {
 			// TODO y += bh
 			dc->y += dc->h;
