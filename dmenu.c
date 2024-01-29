@@ -696,7 +696,8 @@ setup(void)
 	swa.event_mask = ExposureMask | KeyPressMask | VisibilityChangeMask;
 	swa.colormap = xv_cmap;
 
-	win = XCreateWindow(dc->dpy, root, x, y, mw, mh, 0,
+	//;madhu 240129 revert 0fe460dbd469a
+	win = XCreateWindow(dc->dpy, parentwin, x, y, mw, mh, 0,
 			    xv_depth, CopyFromParent, xv_visual,
 			    CWBorderPixel | CWColormap |
 	                    CWOverrideRedirect | CWBackPixel | CWEventMask, &swa);
@@ -713,7 +714,8 @@ setup(void)
 
 	XMapRaised(dc->dpy, win);
 	if (embed) {
-		XReparentWindow(dc->dpy, win, parentwin, x, y);
+		//;madhu 240129 revert 0fe460dbd469a
+	        //XReparentWindow(dc->dpy, win, parentwin, x, y);
 		XSelectInput(dc->dpy, parentwin, FocusChangeMask | SubstructureNotifyMask);
 		if (XQueryTree(dc->dpy, parentwin, &dw, &w, &dws, &du) && dws) {
 			for (i = 0; i < du && dws[i] != win; ++i)
